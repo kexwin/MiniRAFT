@@ -1,0 +1,14 @@
+{
+  "name": "distributed-drawing-board",
+  "version": "1.0.0",
+  "description": "Distributed real-time drawing board with mini-RAFT consensus",
+  "main": "index.js",
+  "scripts": {
+    "dev": "docker-compose up --build",
+    "down": "docker-compose down",
+    "logs": "docker-compose logs -f"
+  },
+  "keywords": ["raft", "consensus", "distributed", "drawing", "websocket"],
+  "author": "CC-Team",
+  "license": "MIT"
+}
