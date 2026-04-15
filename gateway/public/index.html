@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed Drawing Board - RAFT Consensus</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 20px;
+      max-width: 1200px;
+      width: 100%;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 1.8em;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 20px;
+      font-size: 0.9em;
+    }
+
+    .controls {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      align-items: center;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 8px;
+    }
+
+    .control-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    label {
+      font-weight: 500;
+      color: #333;
+      font-size: 0.9em;
+    }
+
+    input[type="color"] {
+      width: 50px;
+      height: 40px;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    input[type="range"] {
+      width: 100px;
+    }
+
+    input[type="number"] {
+      width: 60px;
+      padding: 8px;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 0.95em;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: #667eea;
+      color: white;
+    }
+
+    button:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button.danger {
+      background: #e74c3c;
+    }
+
+    button.danger:hover {
+      background: #c0392b;
+    }
+
+    .status-bar {
+      display: flex;
+      gap: 20px;
+      padding: 12px 15px;
+      background: #ecf0f1;
+      border-radius: 6px;
+      font-size: 0.85em;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #e74c3c;
+    }
+
+    .status-dot.connected {
+      background: #27ae60;
+    }
+
+    .status-dot.synced {
+      background: #3498db;
+    }
+
+    .status-value {
+      font-weight: 600;
+      color: #2c3e50;
+    }
+
+    canvas {
+      border: 3px solid #667eea;
+      border-radius: 8px;
+      background: #f9f9f9;
+      cursor: crosshair;
+      display: block;
+      margin: 0 auto;
+      max-width: 100%;
+      height: auto;
+    }
+
+    .canvas-container {
+      display: flex;
+      justify-content: center;
+      margin-top: 15px;
+    }
+
+    .info-box {
+      background: #e8f4f8;
+      border-left: 4px solid #3498db;
+      padding: 12px 15px;
+      border-radius: 4px;
+      margin-top: 15px;
+      font-size: 0.9em;
+      color: #2c3e50;
+    }
+
+    .info-box strong {
+      color: #2980b9;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 15px;
+      }
+
+      h1 {
+        font-size: 1.4em;
+      }
+
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .control-group {
+        width: 100%;
+      }
+
+      button {
+        flex: 1;
+      }
+
+      input[type="range"],
+      input[type="number"] {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 Distributed Drawing Board</h1>
+    <p class="subtitle">Real-time collaborative canvas with RAFT consensus protocol</p>
+
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-dot" id="connectionStatus"></div>
+        <span>Connection: <span class="status-value" id="connectionText">Connecting...</span></span>
+      </div>
+      <div class="status-item">
+        <span>Leader: <span class="status-value" id="leaderText">Unknown</span></span>
+      </div>
+      <div class="status-item">
+        <span>Term: <span class="status-value" id="termText">0</span></span>
+      </div>
+      <div class="status-item">
+        <span>Strokes: <span class="status-value" id="strokeCount">0</span></span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="colorPicker">Color:</label>
+        <input type="color" id="colorPicker" value="#000000">
+      </div>
+
+      <div class="control-group">
+        <label for="brushSize">Brush Size:</label>
+        <input type="range" id="brushSize" min="1" max="20" value="3">
+        <input type="number" id="brushSizeValue" min="1" max="20" value="3" readonly>
+      </div>
+
+      <div class="control-group">
+        <button id="syncBtn" onclick="syncState()">Sync State</button>
+        <button id="clearBtn" class="danger" onclick="clearCanvas()">Clear Canvas</button>
+      </div>
+    </div>
+
+    <div class="canvas-container">
+      <canvas id="drawingCanvas" width="1000" height="600"></canvas>
+    </div>
+
+    <div class="info-box">
+      <strong>ℹ️ How it works:</strong> Your strokes are submitted to the RAFT leader, replicated across all nodes, and broadcast back to all connected clients. This ensures consistency and fault tolerance even if nodes fail!
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('drawingCanvas');
+    const ctx = canvas.getContext('2d');
+    const colorPicker = document.getElementById('colorPicker');
+    const brushSize = document.getElementById('brushSize');
+    const brushSizeValue = document.getElementById('brushSizeValue');
+
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+    let ws = null;
+    let strokes = [];
+    let clientId = Math.random().toString(36).substring(7);
+
+    // WebSocket connection
+    function connectWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+      ws.onopen = () => {
+        document.getElementById('connectionStatus').classList.add('connected');
+        document.getElementById('connectionText').textContent = 'Connected ✓';
+        console.log('[WebSocket] Connected');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          handleServerMessage(message);
+        } catch (error) {
+          console.error('Failed to parse message:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('[WebSocket] Error:', error);
+        document.getElementById('connectionStatus').classList.remove('connected');
+        document.getElementById('connectionText').textContent = 'Error ✗';
+      };
+
+      ws.onclose = () => {
+        document.getElementById('connectionStatus').classList.remove('connected');
+        document.getElementById('connectionText').textContent = 'Disconnected ✗';
+        console.log('[WebSocket] Disconnected, reconnecting in 3s...');
+        setTimeout(connectWebSocket, 3000);
+      };
+    }
+
+    // Handle server messages
+    function handleServerMessage(message) {
+      if (message.type === 'stroke-committed') {
+        const stroke = message.data;
+        drawStroke(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
+        strokes.push(stroke);
+        document.getElementById('strokeCount').textContent = strokes.length;
+      } else if (message.type === 'clear') {
+        ctx.fillStyle = '#f9f9f9';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        strokes = [];
+        document.getElementById('strokeCount').textContent = '0';
+      } else if (message.type === 'state-sync') {
+        strokes = message.data.strokes || [];
+        redrawCanvas();
+        document.getElementById('strokeCount').textContent = strokes.length;
+      } else if (message.type === 'status') {
+        console.log('[Gateway]', message.data.message);
+      } else if (message.type === 'leader-info') {
+        const leader = message.data.leader || 'Unknown';
+        document.getElementById('leaderText').textContent = leader;
+        const term = message.data.term || 0;
+        document.getElementById('termText').textContent = term;
+      }
+    }
+
+    // Drawing functions
+    function startDrawing(e) {
+      const rect = canvas.getBoundingClientRect();
+      lastX = e.clientX - rect.left;
+      lastY = e.clientY - rect.top;
+      isDrawing = true;
+    }
+
+    function draw(e) {
+      if (!isDrawing) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Draw line locally
+      drawStroke(lastX, lastY, x, y, colorPicker.value, parseInt(brushSize.value));
+
+      if (ws && ws.readyState === 1) {
+        const stroke = {
+          id: `${clientId}-${Date.now()}-${Math.random()}`,
+          x0: lastX,
+          y0: lastY,
+          x1: x,
+          y1: y,
+          color: colorPicker.value,
+          size: parseInt(brushSize.value),
+          timestamp: Date.now(),
+        };
+
+        ws.send(JSON.stringify({ type: 'stroke', data: stroke }));
+      }
+
+      lastX = x;
+      lastY = y;
+    }
+
+    function stopDrawing() {
+      isDrawing = false;
+    }
+
+    function drawStroke(fromX, fromY, toX, toY, color, size) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(toX, toY);
+      ctx.stroke();
+    }
+
+    function redrawCanvas() {
+      ctx.fillStyle = '#f9f9f9';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      strokes.forEach((stroke) => {
+        drawStroke(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
+      });
+    }
+
+    function clearCanvas() {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'clear-all' }));
+      }
+    }
+
+    function syncState() {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'sync-request' }));
+      }
+    }
+
+    // Event listeners
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseout', stopDrawing);
+
+    brushSize.addEventListener('input', (e) => {
+      brushSizeValue.value = e.target.value;
+    });
+
+    // Initialize
+    connectWebSocket();
+    redrawCanvas();
+  </script>
+</body>
+</html>
