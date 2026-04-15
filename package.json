@@ -1,0 +1,16 @@
+{
+  "name": "cc-miniproj-raft",
+  "version": "1.0.0",
+  "description": "Distributed Real-Time Drawing Board with Mini-RAFT Consensus",
+  "main": "index.js",
+  "scripts": {
+    "start": "docker-compose up --build",
+    "stop": "docker-compose down",
+    "logs": "docker-compose logs -f",
+    "logs:gateway": "docker-compose logs -f gateway",
+    "logs:replicas": "docker-compose logs -f replica1 replica2 replica3"
+  },
+  "keywords": ["raft", "consensus", "distributed"],
+  "author": "Your Team",
+  "license": "MIT"
+}
